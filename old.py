@@ -8,59 +8,28 @@ import time
 import urllib
 import random
 
+
 print '\nDF Downloader v-1.6.0\n'
 
 PORT = 6969
 
-testPort = random.randrange(7000,50000)
-testPass = random.randrange(7000,50000)
+with open('homeIP','r') as  f :
+	HOME = f.read().strip()
+
+print HOME
 
 
-print 'Checking Network Configuration  ..  ..   .   \n'
+with open('friends','r') as  f :
+	FRIENDS = f.read().strip().split(',')
 
-def homeBroadcast() :
-	global testPort
-	global testPass
-	time.sleep(0.5)
-	try :
-		s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-		s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
-		s.sendto(str(testPass),('<broadcast>',testPort))
-	except socket.error as error :
-		pass
+FRIENDS.append(HOME)
+FRIENDS = list(set(FRIENDS))
 
-thread.start_new_thread(homeBroadcast,())
-gen = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-gen.bind(('',testPort))
-gen.settimeout(1)
+print FRIENDS
 
-try :
-	data , address = gen.recvfrom(100)
-	if data == str(testPass) :
-		HOME = address[0]
-except socket.error as error :
-	HOME = 'localhost'
-
-try :
-	HOME = address[0]
-except  NameError :
-	HOME = 'localhost'
-
-print 'Configuration Completed\n'
-
-if '192.' in HOME :
-	print 'Connected via Wirless Network IP -  ' +  HOME
-
-elif '172.' in HOME :
-	print 'Connected via LAN  IP - ' +  HOME
-
-else :
-	print 'No access to a network - Please connect to a network and retry\n'  
-	time.sleep(2)
-	exit()
 isLocalBusy = False
 
-threads =  25 
+threads =  7
 
 threadCounter = 0
 partList = []
@@ -88,7 +57,7 @@ class MyHandler(BaseHTTPRequestHandler):
 		global serveList
 		self.send_response(200)
 
-		if 'index' in self.path :
+		if 'home' in self.path :
 			content = """<html>
 			<head><title>DOWNLOADER</title>
 			</head>
@@ -143,7 +112,7 @@ class MyHandler(BaseHTTPRequestHandler):
 			ip = path[1].split('=')[1]
 			file_name = path[0].split('=')[1]
 			start = path[2].split('=')[1]
-			thread.start_new_thread(goFetch,(ip,file_name,start))http://192.168.1.19:6969/
+			thread.start_new_thread(goFetch,(ip,file_name,start))#http://192.168.1.19:6969/
 
 		if 'startdownload' in self.path :
 			path = self.path.split('?')[1].split('&')
@@ -190,18 +159,16 @@ def distDown(url,file_name) :
 	meta = req.info()
 	size = int(meta["Content-Length"])
 	activeClients = []
-	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-	s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
-	s.sendto('!@#$%^',('<broadcast>',PORT+1))
-	start = time.time()
-	s.settimeout(0.2)
 	temp = []
-	while True :
-		if time.time() - start > 1.5 :
-			break
+	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	#s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+	for ip in FRIENDS :
+		s.sendto('!@#$%^',(ip,PORT+1))
+		s.settimeout(0.2)
 		try :
 			temp.append(s.recvfrom(500))
-		except socket.error as error  :
+		except socket.error as error :
+			print error
 			pass
 	for item in temp :
 		if item[0] == '!@#$%^' :
@@ -312,7 +279,7 @@ def combineFiles(file_name,IP) :
 	dataList = sorted(dataList,key=itemgetter(0))
 	content = ''
 	for item in dataList :
-		content += item[1]http://192.168.1.19:6969/
+		content += item[1]#http://192.168.1.19:6969/
 	with open(file_name,'wb') as f :
 		f.write(content)
 	print '\nCompleted For' , IP , '\n'
