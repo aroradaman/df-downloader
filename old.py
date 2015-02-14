@@ -62,7 +62,6 @@ def distDown(url,file_name) :
 def downloader(thread_num,START,END,url,IP,file_name) :
 	global isLocalBusy
 	global PORT
-	global globalList
 	global HOME
 	content = ''
 	req = urllib2.Request(url)
@@ -90,7 +89,6 @@ def downloader(thread_num,START,END,url,IP,file_name) :
 
 def goFetch(IP,file_name,start) :
 	global PORT 
-	global globalList
 	url = 'http://' + IP + ':' + str(PORT) + '/fetchHandler?file_name=' + file_name
 	f = urllib2.urlopen(url)
 	content = ''
@@ -107,13 +105,7 @@ def goFetch(IP,file_name,start) :
 
 def assembler(file_name) :
 	print "\nEnterered global assembler \n"
-	global globalList
-	i = 0
-	for item in globalList :
-		if item[0] == file_name :
-			dataList = item[3]
-			break
-		i+=1
+	global globallist
 	content = ''
 	dataList = sorted(globallist[md5(file_name)]['data'],key=itemgetter(0))
 	for item  in dataList :
@@ -139,14 +131,23 @@ def combineFiles(file_name,IP) :
 	print '\nCompleted For' , IP , '\n'
 	start = locallist[md5(file_name)]['0']['start']
 	url = "http://" + IP + ":" + str(PORT) + "/fetchChild?file=" + file_name + "&ip=" + HOME + "&start=" + str(start)
-	urllib2.urlopen(url)
+	counter = 2
+	while True :
+		try :
+			urllib2.urlopen(url)
+			break
+		except Exception as error :
+			print error
+			print 'Going to sleep for ' + str(counter) + ' seconds' 
+			time.sleep(counter)
+			counter += 3
 	locallist.pop(md5(file_name),None)
 
 def sync() :
 	while True :
 		global locallist
 		global globallist	
-		time.sleep(2)
+		time.sleep(1.5)
 		content = bson.dumps(locallist)
 		with open('LocLog','w') as f :
 			f.write(content)
@@ -180,8 +181,6 @@ with open('friends','r') as  f :
 FRIENDS.append(HOME)
 FRIENDS = list(set(FRIENDS))
 
-print FRIENDS
-
 isLocalBusy = False
 
 threads =  25
@@ -192,7 +191,6 @@ localList = []
 try :
 	with open('LocLog','r') as f :
 		content = f.read()
-	print 'INIT LENGTH : ',len(content)
 	locallist = bson.loads(content)
 	for key in locallist.keys() :
 		for i in range(threads) :
@@ -208,7 +206,6 @@ try :
 except :
 	globallist = {}
 
-globalList = []
 
 threading.Thread(target=sync,args=()).start()
 
@@ -251,7 +248,6 @@ class MyHandler(BaseHTTPRequestHandler):
 			url = self.path.split('url=')[1].split('&filename')[0]
 			file_name = self.path.split('filename=')[1]
 			globallist.update({md5(file_name):{'url':url,'activeClients':[],'data':[]}})
-			globalList.append([file_name, url, [], [] ])
 			threading.Thread(target=distDown,args=(url,file_name)).start()
 
 		if 'completedFor' in self.path :
