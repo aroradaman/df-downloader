@@ -197,7 +197,6 @@ try :
 			if locallist[key][str(i)]['data'] == [] :
 				threading.Thread(target=downloader,args=(i,locallist[key][str(i)]['start'],locallist[key][str(i)]['end'],locallist[key]['url'],locallist[key]['ip'],locallist[key]['file'])).start()
 except Exception as error :
-	print error
 	locallist = {}
 
 try :
