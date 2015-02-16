@@ -12,7 +12,7 @@ import threading
 import json
 import bson
 import time
-
+import subprocess
 
 print '\nDF Downloader v-1.6.0\n'
 
@@ -99,6 +99,24 @@ def downloader(thread_num,START,END,url,IP,file_name,ID) :
 	locallist[ID]['completed'] += 1
 	locallist[ID][str(thread_num)]['data'] = [START,content]
 	print str(locallist[ID]['completed']*100/threads) + '% done for ' + file_name + '  for job ' + ID
+	counter = 0
+	while True :
+		try :
+			url = url = "http://" + IP + ":" + str(PORT) + "/damei" 
+			urllib2.urlopen(url)
+			break
+		except Exception as error :
+			print 'Going to sleep for ' + str(counter) + ' seconds' 
+			time.sleep(counter)
+			counter += 3
+			if counter > 2 :
+				try :
+					url =  'http://' + IP + ':' + str(PORT*2) + '/rescueInit'
+					urllib2.urlopen(url)
+					print 'Trying to rescue initiater ' ,url
+				except Exception as error :
+					print 'Unable to coordinate with initiater : ' , error
+			break
 	if locallist[ID]['completed'] == threads :
 		threading.Thread(target=combineFiles,args=(file_name,locallist[ID]['ip'],ID)).start()
 	
@@ -126,9 +144,9 @@ def assembler(file_name) :
 	dataList = sorted(globallist[md5(file_name)]['data'],key=itemgetter(0))
 	for item  in dataList :
 		content += item[1] 	
-	with open('COMPLETED___'+file_name,'wb') as f :
+	with open(file_name,'wb') as f :
 		f.write(content)
-	print "\nAssembled Successfully \n"
+	print "\nAssembled Successfully " + file_name + "\n"
 	globallist.pop(md5(file_name),None)
 
 def combineFiles(file_name,IP,ID) :
@@ -156,13 +174,21 @@ def combineFiles(file_name,IP,ID) :
 			print 'Going to sleep for ' + str(counter) + ' seconds' 
 			time.sleep(counter)
 			counter += 3
+			if counter > 2 :
+				try :
+					url =  'http://' + IP + ':' + str(PORT*2) + '/rescueInit'
+					urllib2.urlopen(url)
+					print 'Trying to rescue initiater ' ,url
+				except Exception as error :
+					print 'Unable to coordinate with initiater : ' , error
+			break
 	locallist.pop(ID,None)
 
 def sync() :
 	while True :
 		global locallist
 		global globallist	
-		time.sleep(1.5)
+		time.sleep(1)
 		content = bson.dumps(locallist)
 		with open('LocLog','w') as f :
 			f.write(content)
@@ -180,7 +206,7 @@ def maintainer() :
 			counter = 0
 			for ip in globallist[key]['activeClients'] :
 				s.sendto('Hey There!',(ip,PORT+1))
-				s.settimeout(0.5)
+				s.settimeout(1)
 				try:
 					data , addr = s.recvfrom(500)
 				except socket.error as error :
@@ -190,12 +216,10 @@ def maintainer() :
 					else :
 						globallist[key]['activeClients'][counter] = globallist[key]['activeClients'][counter+1]
 					#try :
-					url = "http://" +  str(globallist[key]['activeClients'][counter]) + ":" + str(PORT) + "/startdownload?start=" + str(globallist[key]['range'][counter][0]) + "&end=" + str(globallist[key]['range'][counter][1]) + "&url=" + globallist[key]['url'] + "&ip=" + HOME + "&file_name=" + globallist[key]['file'] + "&self_ip=" + globallist[key]['activeClients'][counter]
-					urllib2.urlopen(url)
-					#except Exception as error :
-					#	print 'Error - ',error
-					print 'Reassigning job to ', globallist[key]['activeClients'][counter]
+					url = "http://" +  globallist[key]['activeClients'][counter] + ":" + str(PORT) + '/maintainSomeone?logLink=' + urllib.quote("http://" +  ip + ":" + str(PORT*2) + '/getLocLog')
 					print url
+					urllib2.urlopen(url)
+					print 'Reassigning job to ', globallist[key]['activeClients'][counter]
 				counter += 1
 
 
@@ -275,13 +299,13 @@ class MyHandler(BaseHTTPRequestHandler):
 			globallist.update({md5(file_name):{'file':file_name,'url':url,'activeClients':[],'range':[],'data':[]}})
 			threading.Thread(target=distDown,args=(url,file_name)).start()
 
-		if 'completedFor' in self.path :
+		elif 'completedFor' in self.path :
 			path = self.path.split('?')[1].split('&')
 			ip = path[1].split('=')[1]
 			file_name = path[0].split('=')[1]
 			threading.Thread(target=notifyComplete,args=(ip,file_name,start)).start()
 
-		if 'fetchHandler' in self.path :
+		elif 'fetchHandler' in self.path :
 			file_name = self.path.split('=')[1]
 			with open(os.path.join(os.getcwd(),file_name),'rb') as f :
 				content = f.read()
@@ -290,7 +314,12 @@ class MyHandler(BaseHTTPRequestHandler):
 			self.wfile.write(content)
 			os.unlink(os.path.join(os.getcwd(),file_name))
 		
-		if 'fetchChild' in self.path :
+		elif 'damei' in self.path :
+			self.send_header( 'Content-type', 'text/html')
+			self.end_headers()
+			self.wfile.write('yo')
+
+		elif 'fetchChild' in self.path :
 			path = self.path.split('?')[1].split('&')
 			file_name = path[3].split('=')[1]
 			ip = path[1].split('=')[1]
@@ -298,7 +327,26 @@ class MyHandler(BaseHTTPRequestHandler):
 			start = path[2].split('=')[1]
 			threading.Thread(target=goFetch,args=(temp_file,ip,start,file_name)).start()#http://192.168.1.19:6969/
 
-		if 'startdownload' in self.path :
+		elif 'maintainSomeone' in self.path :
+			loglink = urllib.unquote(self.path.split('=')[1])
+			req = urllib2.urlopen(loglink)
+			res = req.read()
+			templist = bson.loads(res)
+			for key in templist.keys() :
+				global locallist
+				templist[key]['ip'] = HOME
+				locallist.update({key:templist[key]})
+			for key in templist.keys() :
+				for i in range(threads) :
+					if templist[key][str(i)]['data'] == [] :
+							threading.Thread(target=downloader,args=(i,templist[key][str(i)]['start'],templist[key][str(i)]['end'],templist[key]['url'],templist[key]['ip'],templist[key]['file'],key)).start()
+					#except Exception as error :
+					#	print 'Error->',error
+					#	url = "http://" +  str(globallist[key]['activeClients'][counter]) + ":" + str(PORT) + "/startdownload?start=" + str(globallist[key]['range'][counter][0]) + "&end=" + str(globallist[key]['range'][counter][1]) + "&url=" + globallist[key]['url'] + "&ip=" + HOME + "&file_name=" + globallist[key]['file'] + "&self_ip=" + globallist[key]['activeClients'][counter]
+					#	urllib2.urlopen(url)
+
+
+		elif 'startdownload' in self.path :
 			path = self.path.split('?')[1].split('&')
 			start = int(path[0].split('=')[1])
 			end = int(path[1].split('=')[1])
@@ -334,7 +382,6 @@ class MyHandler(BaseHTTPRequestHandler):
 
 	def log_message(self, format, *args):
 		pass
-
 
 server = HTTPServer(('',PORT), MyHandler)
 server.serve_forever()
