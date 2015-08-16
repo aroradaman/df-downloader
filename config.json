@@ -1,8 +1,8 @@
 {
-	"download_location": "/home/damei/Downloads/", 
+	"download_location": "", 
 	"server_ip": "0.0.0.0",
-	"home_ip": "172.17.14.99",
-	"friends" : [ "172.17.14.99" ],
+	"home_ip": "127.0.0.1",
+	"friends" : [ "127.0.0.1" ],
 	"threads" : 20,
 	"server_port": 6969
 }
