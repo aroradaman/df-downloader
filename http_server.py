@@ -5,9 +5,9 @@ import mainframe
 import os
 app = Flask(__name__)
 
-config = mainframe.get_config()
-mainframe.open_echo_zone(config['server_ip'],config['server_port'])
-download_manager = mainframe.downloader(config)
+download_manager = mainframe.downloader()
+config = download_manager.config
+download_manager.open_echo_zone()
 
 @app.route("/home")
 def hello():
