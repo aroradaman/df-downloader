@@ -7,335 +7,86 @@ import socket
 import time
 import urllib
 import random
-import sqlite3
-import glob
+import hashlib
+import threading
+import json
+import bson
+import time
+import subprocess
 
 print '\nDF Downloader v-1.6.0\n'
 
-print 'All rights reserved\n\tDaman Arora\n\tRavi Shankar Pandey\n\tSiddharatha Sahai'
-
-print '\nNote ##\n\tUnauthorized redistribution of this software may lead to legal actions\n'
-
-
 PORT = 6969
 
-testPort = random.randrange(7000,50000)
-testPass = random.randrange(7000,50000)
-passBroadRecv = random.randrange(100,10000000)
-passBroadSend = random.randrange(100,10000000)
+with open('homeIP','r') as  f :
+	HOME = f.read().strip()
 
-print 'Checking network configuration\n'
-time.sleep(1.5)
+print HOME
 
-def homeBroadcast() :
-	global testPort
-	global testPass
-	time.sleep(0.5)
-	try :
-		s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-		s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
-		s.sendto(str(testPass),('<broadcast>',testPort))
-	except socket.error as error :
-		pass
 
-thread.start_new_thread(homeBroadcast,())
-gen = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-gen.bind(('',testPort))
-gen.settimeout(1)
+with open('friends','r') as  f :
+	FRIENDS = f.read().strip().split(',')
 
-try :
-	data , address = gen.recvfrom(100)
-	if data == str(testPass) :
-		HOME = address[0]
-except socket.error as error :
-	HOME = 'localhost'
+FRIENDS.append(HOME)
+FRIENDS = list(set(FRIENDS))
 
-try :
-	HOME = address[0]
-except  NameError :
-	HOME = 'localhost'
-
-print 'Configuration Completed'
-
-if '192.' in HOME :
-	print 'Connected via Wirless Network IP -  ' +  HOME
-
-elif '172.' in HOME :
-	print 'Connected via LAN  IP - ' +  HOME
-
-else :
-	print 'No access to a network - Please connect to a network and retry\n'  
-	time.sleep(2)
-	exit()
-
-content = '<script type="text/javascript">window.location = "http://' + HOME + ':' + str(PORT) + '/";</script>'
-
-with open('start.html','w') as f :
-        f.write(content)
-
-os.system('start start.html')
 isLocalBusy = False
 
-threads =  25 
-
-threadCounter = 0
-partList = []
-serveList = []
+threads =  25
 
 
-def broadcastListener() :
-	global passBroadRecv
-	global passBroadSend
-	global PORT
-	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-	s.bind(('',PORT-10))
-	while True :
-		data , address = s.recvfrom(500)
-		if data == str(passBroadRecv) :
-			s.sendto(str(passBroadSend),address)
-
-thread.start_new_thread(broadcastListener,())
-
-class MyHandler(BaseHTTPRequestHandler):
-	def do_GET(self):
-		global partList
-		global threads
-		global threadCounter
-		global PORT 
-		global HOME
-		global serveList
-		self.send_response(200)
-
-		if self.path == '/' :
-			content =  '''
-<html>
-<head><title>DF Downloader v-1.6.0</title>
-</head>
-<body>
-<h1>Welcome DF Downloader v-1.6.0</h1>
-<h2>High speed downloads just a click away !!!!! </h2>
-<h2><a href = "http://''' + HOME + ''':''' + str(PORT) + '''/newDownload"> Click here to start new download </a></h2>
-<h2><a href = "http://''' + HOME + ''':''' + str(PORT) + '''/viewDownloads"> Click here to view downloads </a></h2>
-<h2><a href = "http://''' + HOME + ''':''' + str(PORT) + '''/terms&condition"> Click here to view Terms and Condition </a></h2>
-</body>
-</html>
-'''
-			self.send_header('Content-type','text/html')
-			self.end_headers()
-			self.wfile.write(content)
-			return
-		if 'terms&condition' in self.path :
-			content = '''<br>
-<b>1. GRANT OF RIGHTS and RESTRICTIONS ON USE</b><br>
-You and  are granted a nonexclusive, nontransferable, limited right to access and use for indivdual purposes the Online Services and Materials made available to you.<br><br>
-<b>2. RPRODUCTION and REDISTRIBUTION</b><br>
-Any reproduction or redistribution of the software will lead to legal consequences
-
-'''
-			self.send_header('Content-type','text/html')
-			self.end_headers()
-			self.wfile.write(content)
-		if 'viewDownloads' in self.path :
-			con = sqlite3.connect('logs')
-			cur = con.cursor()
-			try :
-				cur.execute('SELECT * FROM logs')
-				logs = cur.fetchall()
-			except sqlite3.OperationalError :
-				logs = []
-			con.close()
-			content = """<html><script type="text/javascript">
-					setTimeout(function(){
-					location = ''
-					},200)
-					</script><body background="goku.jpg"><centre><table border='2' width="100%" ><tr><th>File Name</th><th>Size
-					</th><th> % downloaded </th><th>Clients</th><th>URL</th></tr>"""
-			for item in logs :
-				content += '<tr height="10%"><th>'
-				content += item[0]
-				content += '</th><th>'
-				content += str(item[1])
-				content += '</th><th>'
-				content += str(item[2]*100/(threads*item[3]))
-				content += ' % </th><th>'
-				content += str(item[3])
-				content += '</th><th>'
-				content += item[4]
-				content += '</th></tr>'
-			content += "</table><centre></body></html>"
-			self.send_header('Content-type','text/html')
-			self.end_headers()
-			self.wfile.write(content)
-			return
-
-		if 'newDownload' in self.path :
-			content = """<html>
-			<head><title>DOWNLOADER</title>
-			</head>
-			<body>
-			<br>
-			<form method="GET" action="http://localhost:""" + str(PORT) + """/downloadmanager">
-			<h3>URL : <input type="text" id="letitbeuniqueurl" name="letitbeuniqueurl" size="100">
-			<h3>File Name : <input type="text" name="letitbeuniquefilename" size="40">
-			<input type="submit"></button>
-			</div>
-			</body>
-			</html>"""
-			self.send_header('Content-type','text/html')
-			self.end_headers()
-			self.wfile.write(content)
-			return
-
-		if 'downloadmanager' in self.path :
-			url = self.path.split('letitbeuniqueurl=')[1].split('&filename')[0]
-			file_name = self.path.split('letitbeuniquefilename=')[1]
-			serveList.append([file_name, url, [], [] ])
-			thread.start_new_thread(distDown,(url,file_name))
-			content = '<script type="text/javascript">window.location = "http://localhost:' + str(PORT) + '/viewDownloads";</script>'
-			self.send_header( 'Content-type', 'text/html')
-			self.end_headers()
-			self.wfile.write(content)
-
-		if 'completedFor' in self.path :			
-			path = self.path.split('?')[1].split('&')
-			ip = path[1].split('=')[1]
-			file_name = path[0].split('=')[1]
-			thread.start_new_thread(notifyComplete,(ip,file_name,start))
-	
-		if 'fetchHandler' in self.path :
-			file_name = self.path.split('=')[1]
-			with open(os.path.join(os.getcwd(),file_name),'rb') as f :
-				content = f.read()
-			self.send_header( 'Content-type', 'text/html')
-			self.end_headers()
-			self.wfile.write(content)
-			os.unlink(os.path.join(os.getcwd(),file_name))
-			i = 0
-			for item in partList :
-				if item[4] == file_name :
-					break
-				i+=1
-			partList.remove(partList[i])
-
-		if 'fetchChild' in self.path :
-			path = self.path.split('?')[1].split('&')
-			ip = path[1].split('=')[1]
-			file_name = path[0].split('=')[1]
-			client_number = int(path[2].split('=')[1])
-			thread.start_new_thread(goFetch,(ip,file_name,client_number))
-
-		if 'countIncrement' in self.path :
-			con = sqlite3.connect('logs')
-			cur = con.cursor()
-			cur.execute('SELECT * FROM logs where file = ?',(self.path.split('===')[1],))
-			log = cur.fetchall()[0]
-			cur.execute('DELETE FROM logs WHERE file = ?',(log[0],))
-			cur.execute('INSERT INTO logs values(?,?,?,?,?)',(log[0],log[1],log[2]+1,log[3],log[4]))
-			con.commit()
-			con.close()
-
-
-		if 'startdownload' in self.path :
-			path = self.path.split('?')[1].split('&')
-			start = int(path[0].split('=')[1])
-			end = int(path[1].split('=')[1])
-			url = path[2].split('=')[1]
-			url = urllib.unquote(url)
-			ip = path[3].split('=')[1]
-			file_name = path[4].split('=')[1]
-			self_ip = path[5].split('=')[1]
-			client_number = path[6].split('=')[1]
-			partList.append([start, end, url, ip, file_name, HOME , 0 , [] , client_number])
-			workSplit = []
-			frag = (end - start)/threads
-			for i in range(threads) :
-				if i== 0 :
-					workSplit.append([start,start+frag])
-				else :
-					workSplit.append([start+1,start+frag])
-				start += frag
-
-			workSplit[-1][1] = end
-			for i in range(threads) :
-				thread.start_new_thread(downloader,(i,workSplit[i][0],workSplit[i][1],url,ip,file_name,client_number))
-
-			self.send_header("Content-type", "text/html")
-			self.end_headers()
-
-	def log_request(self, code=None, size=None):
-		pass
-
-	def log_message(self, format, *args):
-		pass
-
+def md5(string) :
+	m = hashlib.md5()
+	m.update(str(string))
+	return m.hexdigest()
 
 def distDown(url,file_name) :
 	global HOME
 	global clientList
 	global PORT
-	global partList
-	global passBroadRecv
-	global passBroadSend
+	global localList	
 	url = urllib2.unquote(url)
 	req = urllib2.urlopen(url)
 	meta = req.info()
 	size = int(meta["Content-Length"])
 	activeClients = []
-	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-	s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
-	Pass = random.randrange(1,500)
-	s.sendto(str(passBroadRecv),('<broadcast>',PORT-10))
-	start = time.time()
-	s.settimeout(0.3)
 	temp = []
-	while True :
-		if time.time() - start > 1.5 :
-			break
+	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	#s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+	for ip in FRIENDS :
+		s.sendto('!@#$%^',(ip,PORT+1))
+		s.settimeout(0.2)
 		try :
 			temp.append(s.recvfrom(500))
-		except socket.error as error  :
+		except socket.error as error :
 			pass
 	for item in temp :
-		if item[0] == str(passBroadSend) :
+		if item[0] == '!@#$%^' :
 			activeClients.append(item[1][0])
-	for item in serveList :
-		if item[0] == file_name :
-			item[2] = activeClients
+	globallist[md5(file_name)]['activeClients'] = activeClients
 	workSplit = []
 	frag = size/len(activeClients)
 	start = 0
-	con = sqlite3.connect('logs')
-	cur = con.cursor()
-	try :
-		cur.execute('CREATE TABLE logs ( file varchar(100) , size int , count int,clients int, url varchar(500))')
-	except sqlite3.OperationalError :
-		pass
-	cur.execute('SELECT * FROM logs WHERE file = ?',(file_name,))
-	logs = cur.fetchall()
-	if len(logs)==0 :
-		cur.execute('INSERT INTO logs values(?,?,?,?,?)',(file_name,size,0,len(activeClients),url))
-		con.commit()
-		con.close()
-		for i in range(threads) :
-			if i== 0 :
-				workSplit.append([start,start+frag])
-			else :
-				workSplit.append([start+1,start+frag])
-			start += frag
-		workSplit[-1][1] = size
-		print '\n##############   DOWNLOAD DISTRIBUTION     ###################\n'
-		for i in range(len(activeClients)) :
-			urllib2.urlopen("http://" + activeClients[i] + ":" + str(PORT) + "/startdownload?start=" + str(workSplit[i][0]) + "&end=" + str(workSplit[i][1]) + "&url=" + urllib.quote(url) +  "&ip=" + HOME + "&file_nmae=" + file_name + "&self_ip=" + activeClients[i] + '&client_num=' +str(i) )
-			print str(i+1) + '.  ' + ' CLIENT - ' +  str(activeClients[i])  + ' START - ' + str(workSplit[i][0]) + ' END - ' + str(workSplit[0][1])
-		print '\n###################			 ###################   \n'
-	else :
-		print '\n########################## File already exists -- ' + logs[0][0] + ' #####\n'
+	for i in range(threads) :
+		if i== 0 :
+			workSplit.append([start,start+frag])
+		else :
+			workSplit.append([start+1,start+frag])
+		start += frag
+	workSplit[-1][1] = size
+	print '\n##########    DOWNLOAD DISTRIBUTION   #################\n'
+	for i in range(len(activeClients)) :
+		globallist[md5(file_name)]['range'].append([int(workSplit[i][0]),int(workSplit[i][1])])
+		urllib2.urlopen("http://" + activeClients[i] + ":" + str(PORT) + "/startdownload?start=" + str(workSplit[i][0]) + "&end=" + str(workSplit[i][1]) + "&url=" + urllib.quote(url) + "&ip=" + HOME + "&file_nmae=" + file_name + "&self_ip=" + activeClients[i])
+		print str(i+1) + '.  ' + ' CLIENT - ' +  str(activeClients[i])  + '    START - ' + str(workSplit[i][0]) + ' END - ' + str(workSplit[i][1])
+	print '\n###################				 ###################\n'
 
 
-def downloader(thread_num,START,END,url,IP,file_name,client_number) :
+def downloader(thread_num,START,END,url,IP,file_name,ID) :
+	#global isLocalBusy
 	global PORT
-	global serveList
 	global HOME
+	#START = locallist[ID]['start']
 	content = ''
 	req = urllib2.Request(url)
 	req.headers["Range"]='bytes='+str(START)+'-'+str(END)
@@ -345,29 +96,34 @@ def downloader(thread_num,START,END,url,IP,file_name,client_number) :
 		if not data :
 			break
 		content += data
+	locallist[ID]['completed'] += 1
+	locallist[ID][str(thread_num)]['data'] = [START,content]
+	print str(locallist[ID]['completed']*100/threads) + '% done for ' + file_name + '  for job ' + ID
+	counter = 0
+	while True :
+		try :
+			url = url = "http://" + IP + ":" + str(PORT) + "/damei" 
+			urllib2.urlopen(url)
+			break
+		except Exception as error :
+			print 'Going to sleep for ' + str(counter) + ' seconds' 
+			time.sleep(counter)
+			counter += 3
+			if counter > 2 :
+				try :
+					url =  'http://' + IP + ':' + str(PORT*2) + '/rescueInit'
+					urllib2.urlopen(url)
+					print 'Trying to rescue initiater ' ,url
+				except Exception as error :
+					print 'Unable to coordinate with initiater : ' , error
+			break
+	if locallist[ID]['completed'] == threads :
+		threading.Thread(target=combineFiles,args=(file_name,locallist[ID]['ip'],ID)).start()
+	
 
-	if thread_num < 10 :
-		with open(file_name + '0' + str(thread_num) + '.temp' , 'wb') as f :
-			f.write(content)
-	else :
-		with open(file_name + str(thread_num) + '.temp' , 'wb') as f :
-			f.write(content)
-
-	new_url = 'http://' + IP + ':' + str(PORT) + '/countIncrement?file===' + file_name
-	urllib2.urlopen(new_url)
-	for item in partList :
-		if item[4] == file_name :
-			item[6] += 1
-			print str(item[6]*100/threads) + '% done for ' + item[4] + '  ...........'
-			if item[6] == threads :
-				thread.start_new_thread(combineFiles,(file_name,item[3],client_number))
-				item[6] = 0
-
-
-def goFetch(IP,file_name,client_number) :
+def goFetch(temp_file,ip,start,file_name) :
 	global PORT 
-	global serveList
-	url = 'http://' + IP + ':' + str(PORT) + '/fetchHandler?file_name=' + file_name
+	url = 'http://' + ip + ':' + str(PORT) + '/fetchHandler?file_name=' + temp_file
 	f = urllib2.urlopen(url)
 	content = ''
 	while True :
@@ -375,79 +131,257 @@ def goFetch(IP,file_name,client_number) :
 		if not data :
 			break
 		content += data
-
-	if client_number < 10 :
-		file_ = file_name + '000' + str(client_number)
-	elif client_number < 100 and client_number >= 10 :
-		file_ = file_name + '00' + str(client_number)
-	elif client_number < 1000 and client_number >= 100 :
-		file_ = file_name + '0' + str(client_number)
-
-	with open(file_ + '.temp','wb') as f :
-		f.write(content)
 	print '\nFetching url ' , url , '\n'
-	for item in serveList :
-		if item[0] == file_name :
-			item[3].append([str(client_number)])
-			if len(item[2]) == len(item[3]):
-				thread.start_new_thread(assembler,(file_name,))
+	globallist[md5(file_name)]['data'].append([int(start),content])
+	if len(globallist[md5(file_name)]['data']) == len(globallist[md5(file_name)]['activeClients']):
+		threading.Thread(target=assembler,args=(file_name,)).start()
 
 
 def assembler(file_name) :
 	print "\nEnterered global assembler \n"
-	global serveList
-	i = 0
-	for item in serveList :
-		if item[0] == file_name :
-			dataList = item[3]
-			break
-		i+=1
-
+	global globallist
 	content = ''
-	files = glob.glob('*.temp')
-	files_ = []
-	for item in files :
-		if file_name in item :
-			files_.append(item)
-	files_.sort()
-	with open (file_name,'wb') as output :
-		for inner in files_ :
-			print inner
-			with open(inner,'rb') as f :
-				 for line in f :
-					output.write(line)
-	for item in files_ :
-		os.unlink(item)
-	print "\nAssembled Successfully \n"
-	serveList.remove(serveList[i])
+	dataList = sorted(globallist[md5(file_name)]['data'],key=itemgetter(0))
+	for item  in dataList :
+		content += item[1] 	
+	with open(file_name,'wb') as f :
+		f.write(content)
+	print "\nAssembled Successfully " + file_name + "\n"
+	globallist.pop(md5(file_name),None)
 
-def combineFiles(file_name,IP,client_number) :
+def combineFiles(file_name,IP,ID) :
 	print "\nEnterered local assembler \n"
 	global threads
-	global partList
+	global localList
 	global HOME
 	global PORT
-	files = glob.glob('*.temp')
-	files_ = []
-	for item in files :
-		if file_name in item :
-			files_.append(item)
-	files_.sort()
-	with open (file_name,'wb') as output :
-		for inner in files_ :
-			print inner
-			with open(inner,'rb') as f :
-				 for line in f :
-					output.write(line)
-	for item in files_ :
-		os.unlink(item)
-	for item in partList :
-		if item[4] == file_name :
-			start = item[0]
-	url = "http://" + IP + ":" + str(PORT) + "/fetchChild?file=" + file_name + "&ip=" + HOME + "&client=" + str(client_number)
-	urllib2.urlopen(url)
+	dataList = [ locallist[ID][str(i)]['data'] for i in range(threads) ]
+	dataList = sorted(dataList,key=itemgetter(0))
+	content = ''
+	for item in dataList :
+		content += item[1]#http://192.168.1.19:6969/
+	with open(ID,'wb') as f :
+		f.write(content)
+	print '\nCompleted For' , IP , '\n'
+	start = locallist[ID]['0']['start']
+	url = "http://" + IP + ":" + str(PORT) + "/fetchChild?ID=" + ID + "&ip=" + HOME + "&start=" + str(start) + "&file=" + file_name
+	counter = 2
+	while True :
+		try :
+			urllib2.urlopen(url)
+			break
+		except Exception as error :
+			print 'Going to sleep for ' + str(counter) + ' seconds' 
+			time.sleep(counter)
+			counter += 3
+			if counter > 2 :
+				try :
+					url =  'http://' + IP + ':' + str(PORT*2) + '/rescueInit'
+					urllib2.urlopen(url)
+					print 'Trying to rescue initiater ' ,url
+				except Exception as error :
+					print 'Unable to coordinate with initiater : ' , error
+			break
+	locallist.pop(ID,None)
 
+def sync() :
+	while True :
+		global locallist
+		global globallist	
+		time.sleep(1)
+		content = bson.dumps(locallist)
+		with open('LocLog','w') as f :
+			f.write(content)
+		content = bson.dumps(globallist)
+		with open('GlobLog','w') as f :
+			f.write(content)
+
+def maintainer() :
+	global PORT
+	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	while True :
+		time.sleep(0.5)
+		global globallist
+		for key in globallist :
+			counter = 0
+			for ip in globallist[key]['activeClients'] :
+				s.sendto('Hey There!',(ip,PORT+1))
+				s.settimeout(1)
+				try:
+					data , addr = s.recvfrom(500)
+				except socket.error as error :
+					print 'Connection lost with ' + ip
+					if not counter == 0 :
+						globallist[key]['activeClients'][counter] = globallist[key]['activeClients'][counter-1]
+					else :
+						globallist[key]['activeClients'][counter] = globallist[key]['activeClients'][counter+1]
+					#try :
+					url = "http://" +  globallist[key]['activeClients'][counter] + ":" + str(PORT) + '/maintainSomeone?logLink=' + urllib.quote("http://" +  ip + ":" + str(PORT*2) + '/getLocLog')
+					print url
+					urllib2.urlopen(url)
+					print 'Reassigning job to ', globallist[key]['activeClients'][counter]
+				counter += 1
+
+
+
+def statusListener() :
+	global PORT
+	s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	s.bind(('',PORT+1))
+	while True :
+		data , address = s.recvfrom(500)
+		if data == '!@#$%^' :
+			s.sendto('!@#$%^',address)
+		else :
+			s.sendto('whatsp?',address)
+
+
+threadCounter = 0
+
+
+try :
+	with open('LocLog','r') as f :
+		content = f.read()
+	locallist = bson.loads(content)
+	for key in locallist.keys() :
+		for i in range(threads) :
+			if locallist[key][str(i)]['data'] == [] :
+				threading.Thread(target=downloader,args=(i,locallist[key][str(i)]['start'],locallist[key][str(i)]['end'],locallist[key]['url'],locallist[key]['ip'],locallist[key]['file'],key)).start()
+except Exception as error :
+	locallist = {}
+
+try :
+	with open('GlobLog','r') as f :
+		globallist = bson.loads(f.read())
+except :
+	globallist = {}
+
+
+threading.Thread(target=sync,args=()).start()
+threading.Thread(target=statusListener,args=()).start()
+threading.Thread(target=maintainer,args=()).start()
+
+class MyHandler(BaseHTTPRequestHandler):
+	def do_GET(self):
+		global localList
+		global threads
+		global threadCounter
+		global PORT 
+		global HOME
+		global globalList
+		self.send_response(200)
+
+		if 'home' in self.path :
+			content = """<html>
+			<head><title>DOWNLOADER</title>
+			</head>
+			<body>
+			<!--
+			<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js" type="text/javascript">
+			</script>;
+			-->
+			<h3>Enter url/filename here</h3><br>
+			<form method="GET" action="http://""" + HOME + """:6969/downloadmanager">
+			<input type="text" name="url"><br>
+			<input type="text" name="filename">
+			<input type="submit">Submit</button>
+			</body>
+			</html>"""
+			self.send_header('Content-type','text/html')
+			self.end_headers()
+			self.wfile.write(content)
+			return
+
+		if 'downloadmanager' in self.path :
+			x = self.path.split('?')[1].split('&')
+			url = self.path.split('url=')[1].split('&filename')[0]
+			file_name = self.path.split('filename=')[1]
+			globallist.update({md5(file_name):{'file':file_name,'url':url,'activeClients':[],'range':[],'data':[]}})
+			threading.Thread(target=distDown,args=(url,file_name)).start()
+
+		elif 'completedFor' in self.path :
+			path = self.path.split('?')[1].split('&')
+			ip = path[1].split('=')[1]
+			file_name = path[0].split('=')[1]
+			threading.Thread(target=notifyComplete,args=(ip,file_name,start)).start()
+
+		elif 'fetchHandler' in self.path :
+			file_name = self.path.split('=')[1]
+			with open(os.path.join(os.getcwd(),file_name),'rb') as f :
+				content = f.read()
+			self.send_header( 'Content-type', 'text/html')
+			self.end_headers()
+			self.wfile.write(content)
+			os.unlink(os.path.join(os.getcwd(),file_name))
+		
+		elif 'damei' in self.path :
+			self.send_header( 'Content-type', 'text/html')
+			self.end_headers()
+			self.wfile.write('yo')
+
+		elif 'fetchChild' in self.path :
+			path = self.path.split('?')[1].split('&')
+			file_name = path[3].split('=')[1]
+			ip = path[1].split('=')[1]
+			temp_file = path[0].split('=')[1]
+			start = path[2].split('=')[1]
+			threading.Thread(target=goFetch,args=(temp_file,ip,start,file_name)).start()#http://192.168.1.19:6969/
+
+		elif 'maintainSomeone' in self.path :
+			loglink = urllib.unquote(self.path.split('=')[1])
+			req = urllib2.urlopen(loglink)
+			res = req.read()
+			templist = bson.loads(res)
+			for key in templist.keys() :
+				global locallist
+				templist[key]['ip'] = HOME
+				locallist.update({key:templist[key]})
+			for key in templist.keys() :
+				for i in range(threads) :
+					if templist[key][str(i)]['data'] == [] :
+							threading.Thread(target=downloader,args=(i,templist[key][str(i)]['start'],templist[key][str(i)]['end'],templist[key]['url'],templist[key]['ip'],templist[key]['file'],key)).start()
+					#except Exception as error :
+					#	print 'Error->',error
+					#	url = "http://" +  str(globallist[key]['activeClients'][counter]) + ":" + str(PORT) + "/startdownload?start=" + str(globallist[key]['range'][counter][0]) + "&end=" + str(globallist[key]['range'][counter][1]) + "&url=" + globallist[key]['url'] + "&ip=" + HOME + "&file_name=" + globallist[key]['file'] + "&self_ip=" + globallist[key]['activeClients'][counter]
+					#	urllib2.urlopen(url)
+
+
+		elif 'startdownload' in self.path :
+			path = self.path.split('?')[1].split('&')
+			start = int(path[0].split('=')[1])
+			end = int(path[1].split('=')[1])
+			url = path[2].split('=')[1]
+			url = urllib.unquote(url)
+			#url.replace('!P@R#O$B%L!E@M#','&')
+			ip = path[3].split('=')[1]
+			file_name = path[4].split('=')[1]
+			#os.mkdir(md5(file_name))
+			self_ip = path[5].split('=')[1]
+			ID = md5(file_name+str(start))
+			locallist.update({ID:{}})
+			#localList.append([start, end, url, ip, file_name, HOME , 0 , []])
+			workSplit = []
+			frag = (end - start)/threads
+			for i in range(threads) :
+				if i== 0 :
+					workSplit.append([start,start+frag])
+				else :
+					workSplit	.append([start+1,start+frag])
+				start += frag
+
+			workSplit[-1][1] = end
+			for i in range(threads) :
+				locallist[ID].update({'completed':0,'url':url,'ip':ip,'file':file_name,'HOME':HOME,str(i):{'start':workSplit[i][0],'end':workSplit[i][1],'data':[]}})
+				threading.Thread(target=downloader,args=(i,workSplit[i][0],workSplit[i][1],url,ip,file_name,ID)).start()
+			self.send_header("Content-type", "text/html")
+			self.end_headers()
+		
+
+	def log_request(self, code=None, size=None):
+		pass
+
+	def log_message(self, format, *args):
+		pass
 
 server = HTTPServer(('',PORT), MyHandler)
 server.serve_forever()
-
