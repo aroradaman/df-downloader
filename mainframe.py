@@ -27,8 +27,8 @@ class downloader() :
 
 	def start_background_sync_client(self) :
 		threading.Thread(target=self.sync_proc__1,args=()).start()
-		threading.Thread(target=self.sync_proc__2,args=()).start()
-		threading.Thread(target=self.sync_proc__3,args=()).start()
+		#threading.Thread(target=self.sync_proc__2,args=()).start()
+		#threading.Thread(target=self.sync_proc__3,args=()).start()
 
 	def sync_proc__1(self)  :
 		while True :
