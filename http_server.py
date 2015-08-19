@@ -7,7 +7,9 @@ app = Flask(__name__)
 
 download_manager = mainframe.downloader()
 config = download_manager.config
-download_manager.open_echo_zone()
+
+download_manager.start_background_sync_server()
+download_manager.start_background_sync_client()
 
 @app.route("/home")
 def hello():
