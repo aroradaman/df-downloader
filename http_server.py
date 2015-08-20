@@ -52,8 +52,7 @@ def local_init():
 def fetch_local_data():
 	start = int(request.form['start'])
 	local_id = request.form['local_id']
-	ip = request.form['ip']
-	url = request.form["url"]
+	ip = request.form['ip']	
 	file_name = request.form["file_name"]
 	threading.Thread(target=download_manager.fetch_local_data,args=(local_id,ip,start,file_name)).start()
 	return '...'
