@@ -17,6 +17,7 @@ class downloader :
 	def __init__(self) :
 		self.config = self.get_config()
 		self.global_dict = {}
+		self.lock = threading.Lock()
 		self.local_dict = {}
 		self.job_configs = {}
 		self.master_job_configs = {}
@@ -61,7 +62,8 @@ class downloader :
 	def logger(self) :
 		while True :
 			time.sleep(self.config['log_interval'])
-			jobs = self.synced_job_configs.keys()
+			self.lock.acquire()
+			jobs = self.synced_job_configs.keys()			
 			if len(jobs) > 0 :
 				print
 				print '##' * 50
@@ -88,32 +90,31 @@ class downloader :
 				print
 				print '##' * 50
 				print
+			self.lock.release()
 
 	def start_background_sync_client(self) :
-		threading.Thread(target=self.sync_proc__1,args=()).start()
-		#threading.Thread(target=self.sync_proc__2,args=()).start()
-		#threading.Thread(target=self.sync_proc__3,args=()).start()
-
-	def sync_proc__1(self)  :
+		threading.Thread(target=self.sync_proc_client,args=()).start()
+		
+	def sync_proc_client(self)  :
 		while True :
-			sync__interval = float(random.randrange(10*self.config['sync_interval_min'],10*self.config['sync_interval_max']))/10
-			time.sleep(sync__interval)
-			jobs_at_master = self.job_configs.keys()
-			for job in jobs_at_master :
-				for peer in self.global_dict[job]['active_peers'] :
-					self.udp_sock.sendto('sync_proc__1' + job ,(peer,self.config['sync_server_port']))
-
-	def sync_proc__2(self)  :
-		while True :
-			sync__interval = random.randrange(3,6)
-			time.sleep(sync__interval)
-			##proc
-	
-	def sync_proc__3(self)  :
-		while True :
-			sync__interval = random.randrange(3,6)
-			time.sleep(sync__interval)
-			##proc
+			try :
+				self.lock.acquire()
+				sync__interval = float(random.randrange(10*self.config['sync_interval_min'],10*self.config['sync_interval_max']))/10
+				time.sleep(sync__interval)
+				jobs_at_master = self.job_configs.keys()
+				for job in jobs_at_master :
+					for peer in self.global_dict[job]['active_peers'] :
+						self.udp_sock.sendto('sync_proc__1' + job ,(peer,self.config['sync_server_port']))
+				del_obj = []
+				for job in self.global_dict.keys() :				
+					if self.global_dict[job]['status'] == 'done' :
+						for i in range(len(self.global_dict[job]['active_peers'])) :
+							self.udp_sock.sendto('dwnd__done__' + job,(self.global_dict[job]['active_peers'][i],self.config['sync_server_port']))
+							del_obj.append(job)
+				del_obj = [ self.global_dict.pop(job,None) for job in del_obj ]				
+				self.lock.release()
+			except Exception as error :
+				pass
 
 	def sync_server(self) :
 		sync_server = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
@@ -138,8 +139,15 @@ class downloader :
 						frag.update({'threads_completed':value['threads_completed']})				
 				self.udp_sock.sendto('rply_proc__1' + json.dumps(frag),(host,self.config['sync_server_port']))
 
-			elif tag == 'sync_proc__2' : 
-				pass
+			elif tag == 'dwnd__done__' :
+				self.lock.acquire()
+				print 'dwnd__done__\n\n'
+				del_keys = [ key for key in self.local_dict.keys() 	if self.local_dict[key]['main_job'] == msg ]
+				del_keys = [ self.local_dict.pop(key,None) for key in del_keys ]
+				if msg in self.synced_job_configs.keys() :
+					self.synced_job_configs.pop(msg,None)				
+				self.lock.release()
+
 
 			elif tag == 'sync_proc__3' :
 				pass
@@ -203,7 +211,7 @@ class downloader :
 		except KeyError :
 			pass
 		active_peers = self.check_if_online()
-		self.global_dict.update({ self.md5(filename): {'range':[],'data':[],'active_peers':active_peers}})	
+		self.global_dict.update({ self.md5(filename): {'url':url,'file_name':filename,'range':[],'data':[],'active_peers':active_peers,'status':'in progress'}})
 		workSplit = []
 		frag = size/len(active_peers)	
 		start = 0
@@ -240,8 +248,7 @@ class downloader :
 		work_split[-1][1] = end		
 		for i in range(self.config['threads']) :			
 			self.local_dict[local_id].update({'threads_completed':0,'url':url,'reporting_ip':reporting_ip,'file':file_name,'home_ip':self.config['home_ip'],str(i):{'start':work_split[i][0],'end':work_split[i][1],'data':[]}})
-			self.pool.add_task(self.basic_downloader,i,local_id)
-			#threading.Thread(target=self.basic_downloader,args=(i,work_split[i][0],work_split[i][1],url,reporting_ip,file_name,local_id)).start()		
+			self.pool.add_task(self.basic_downloader,i,local_id)	
 		self.job_configs.update({ self.md5(file_name) : 
 														{   
 															'reporting_ip'	: 	reporting_ip,
@@ -263,6 +270,7 @@ class downloader :
 				break
 			content += data
 		self.local_dict[local_id]['threads_completed'] += 1
+		self.local_dict[local_id]['main_job'] = self.md5(self.local_dict[local_id]['file'])
 		self.local_dict[local_id][str(thread_num)]['data'] = [self.local_dict[local_id][str(thread_num)]['start'],content]		
 		if self.local_dict[local_id]['threads_completed'] == self.config['threads'] :
 			threading.Thread(target=self.local_data_assembly,args=(local_id,)).start()
@@ -275,8 +283,10 @@ class downloader :
 			f.write(content)
 		req_url = "http://" + self.local_dict[local_id]['reporting_ip'] + ":" + str(self.config['server_port']) + "/fetch_local_data"
 		post_data = {
-			'start'	 		: self.local_dict[local_id]['0']['start'],			
-			'file_name'		: self.local_dict[local_id]['file']
+			'start'	 		: self.local_dict[local_id]['0']['start'],
+			'file_name'		: self.local_dict[local_id]['file'],
+			'ip'			: self.config['home_ip'],
+			'local_id'		: local_id
 		}
 		req = requests.post(req_url,data=post_data)		
 
@@ -286,16 +296,22 @@ class downloader :
 			'local_id' : local_id			
 		}
 		req = requests.post(req_url,data=post_data)
-		content = req.text
-		self.global_dict[self.md5(file_name)]['data'].append([int(start),content])
+		content = req.content
+		self.global_dict[self.md5(file_name)]['data'].append([int(start),content])		
 		if len(self.global_dict[self.md5(file_name)]['data']) == len(self.global_dict[self.md5(file_name)]['active_peers']):
 			threading.Thread(target=self.global_data_assembley,args=(file_name,)).start()
 
-	def global_data_assembley(self,file_name) :		
+	def global_data_assembley(self,file_name) :				
 		content = ''.join( item[1] for item in sorted(self.global_dict[self.md5(file_name)]['data'],key=itemgetter(0)))
+		print '\n\nJob ' + self.md5(file_name) + ' done :D '
+		print '\tFile :\t\t' + file_name
+		print '\tDownload Url : \t' + self.global_dict[self.md5(file_name)]['url']
+		print
+		print
 		with open(file_name,'wb') as f :
-			f.write(content)
-		
+			f.write(content)		
+		self.global_dict[self.md5(file_name)]['status'] = 'done'
+
 class Worker(threading.Thread) :
 	def __init__(self, tasks) :
 		threading.Thread.__init__(self)
