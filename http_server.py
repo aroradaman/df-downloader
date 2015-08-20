@@ -12,7 +12,7 @@ download_manager.start_background_sync_server()
 download_manager.start_background_sync_client()
 
 @app.route("/home")
-def hello():
+def home():
 	content = """<html>
 			<head><title>DOWNLOADER</title>
 			</head>
@@ -21,8 +21,8 @@ def hello():
 			<script src="http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js" type="text/javascript">
 			</script>;
 			-->
-			<h3>Enter url/filename here</h3><br>
-			<form method="GET" action="http://""" + config['home_ip'] + """:""" + str(config['server_port']) + """/distributor">
+			<h3>Enter url/filename here</h3><br>			
+			<form action="/distributor" method="post">
 			<h1>URL</h1> - <input type="text" name="url"><br>
 			<h1>FILE</h1> - <input type="text" name="filename">
 			<input type="submit">Submit</button>
@@ -30,36 +30,37 @@ def hello():
 			</html>"""
 	return content
 
-@app.route("/distributor")
+
+@app.route("/distributor",methods=['POST'])
 def distributor():
-	url = request.args.get("url")
-	filename = request.args.get("filename")
+	url = request.form["url"]
+	filename = request.form["filename"]
 	threading.Thread(target=download_manager.distributor,args=(url,filename)).start()
 	return '...'
 
-@app.route("/local_init")
+@app.route("/local_init",methods=['POST'])
 def local_init():
-	start = int(request.args.get('start'))
-	end = int(request.args.get('end'))
-	reporting_ip = request.args.get('reporting_ip')	
-	url = request.args.get("url")
-	file_name = request.args.get("file_name")
+	start = int(request.form['start'])
+	end = int(request.form['end'])
+	reporting_ip = request.form['reporting_ip']
+	url = request.form["url"]
+	file_name = request.form["file_name"]
 	threading.Thread(target=download_manager.local_init,args=(start,end,url,file_name,reporting_ip)).start()
 	return '...'
 
-@app.route("/fetch_local_data")
+@app.route("/fetch_local_data",methods=['POST'])
 def fetch_local_data():
-	start = int(request.args.get('start'))
-	local_id = request.args.get('local_id')
-	ip = request.args.get('ip')	
-	url = request.args.get("url")
-	file_name = request.args.get("file_name")
+	start = int(request.form['start'])
+	local_id = request.form['local_id']
+	ip = request.form['ip']
+	url = request.form["url"]
+	file_name = request.form["file_name"]
 	threading.Thread(target=download_manager.fetch_local_data,args=(local_id,ip,start,file_name)).start()
 	return '...'
 
-@app.route("/local_transfer")
+@app.route("/local_transfer",methods=['POST'])
 def local_transfer() :
-	local_id = request.args.get('local_id')
+	local_id = request.form['local_id']
 	with open(os.path.join(os.getcwd(),local_id),'rb') as f :
 		content = f.read()
 	os.unlink(os.path.join(os.getcwd(),local_id))
