@@ -10,8 +10,9 @@ import os
 import random
 import time
 import psutil
+from Queue import Queue
 
-class downloader() :
+class downloader :
 	def __init__(self) :
 		self.config = self.get_config()
 		self.global_dict = {}
@@ -20,11 +21,41 @@ class downloader() :
 		self.master_job_configs = {}
 		self.synced_job_configs = {}
 		self.udp_sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+		self.pool = ThreadPool(self.config['threads'])
 		threading.Thread(target=self.logger,args=()).start()
 
 	def get_config(self) :
 		with open('config.json','r') as f :
 			return json.loads(f.read())
+
+	# def render_html_log(self) :
+	# 	jobs = self.synced_job_configs.keys()
+	# 		if len(jobs) > 0 :
+	# 			print
+	# 			print '##' * 50
+	# 			print '\nAvailable Jobs :\n'
+	# 			#print json.dumps(self.synced_job_configs,indent=4)
+	# 			for job in jobs :
+	# 				print '\t',job
+	# 				print '\t\tInititaor\t',self.synced_job_configs[job]['reporting_ip']
+	# 				print '\t\tFile Name\t',self.synced_job_configs[job]['file_name']
+	# 				print '\t\tDownload Url\t',self.synced_job_configs[job]['url']					
+	# 				print '\t\tPeers'
+	# 				print '\t\t\tPeer\t\tPercent Done\tCPU Usage' 
+	# 				tot_threas_completed = 0					
+	# 				for peer in self.synced_job_configs[job]['peers'].keys() :
+	# 					string = '\t\t\t'
+	# 					string += peer
+	# 					string += '\t'
+	# 					string += str( float(self.synced_job_configs[job]['peers'][peer]['threads_completed']*100) / self.config['threads'] ) + '%'
+	# 					string += '\t\t'
+	# 					string += str(self.synced_job_configs[job]['peers'][peer]['cpu_percent'])
+	# 					print string
+	# 					tot_threas_completed += self.synced_job_configs[job]['peers'][peer]['threads_completed']
+	# 				print '\t\tTotal Percentage Done\t'+ str( float(tot_threas_completed*100) / (len(self.synced_job_configs[job]['peers'].keys())*self.config['threads']) )
+	# 			print
+	# 			print '##' * 50
+	# 			print
 
 	def logger(self) :
 		while True :
@@ -204,7 +235,8 @@ class downloader() :
 		work_split[-1][1] = end		
 		for i in range(self.config['threads']) :
 			self.local_dict[local_id].update({'threads_completed':0,'url':url,'reporting_ip':reporting_ip,'file':file_name,'home_ip':self.config['home_ip'],str(i):{'start':work_split[i][0],'end':work_split[i][1],'data':[]}})
-			threading.Thread(target=self.basic_downloader,args=(i,work_split[i][0],work_split[i][1],url,reporting_ip,file_name,local_id)).start()		
+			self.pool.add_task(self.basic_downloader,i,work_split[i][0],work_split[i][1],url,reporting_ip,file_name,local_id)
+			#threading.Thread(target=self.basic_downloader,args=(i,work_split[i][0],work_split[i][1],url,reporting_ip,file_name,local_id)).start()		
 		self.job_configs.update({ self.md5(file_name) : 
 														{   
 															'reporting_ip'	: 	reporting_ip,
@@ -262,3 +294,32 @@ class downloader() :
 			f.write(content)
 		#print "\nAssembled Successfully " + file_name + "\n"
 		#self.global_dict.pop(self.md5(file_name),None)
+
+class Worker(threading.Thread) :
+	def __init__(self, tasks) :
+		threading.Thread.__init__(self)
+		self.tasks = tasks
+		self.daemon = True
+		self.start()
+
+	def run(self) :
+		while True :
+			func, args, kargs = self.tasks.get()
+			try:
+				func(*args, **kargs)
+			except Exception, e:
+				print e
+			finally:
+				self.tasks.task_done()
+
+class ThreadPool :
+	def __init__(self, num_threads) :
+		self.tasks = Queue(num_threads)
+		for _ in range(num_threads) :
+			Worker(self.tasks)
+
+	def add_task(self, func, *args, **kargs) :		
+		self.tasks.put((func, args, kargs))
+
+	def wait_completion(self) :
+		self.tasks.join()
