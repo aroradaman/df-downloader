@@ -21,7 +21,7 @@ class downloader :
 		self.master_job_configs = {}
 		self.synced_job_configs = {}
 		self.udp_sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-		self.pool = ThreadPool(self.config['threads'])
+		self.pool = ThreadPool(self.config['thread_pool_size'])
 		threading.Thread(target=self.logger,args=()).start()
 
 	def get_config(self) :
