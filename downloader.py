@@ -6,11 +6,12 @@ import threading
 from operator import itemgetter
 import os
 from Queue import Queue
+import sys
 
 class dfDownloader :
 	def __init__(self) :
 		
-		with open('config.json','r') as f :
+		with open('/Users/damei/df-downloader/config.json','r') as f :
 			self.config = json.loads(f.read())
 		
 		self.manager = {}
@@ -19,9 +20,11 @@ class dfDownloader :
 
 		organizerThread = threading.Thread(target=self.organizer,args=())
 		organizerThread.start()
+		# organizerThread.join()
 
 		loggerThread = threading.Thread(target=self.logger,args=())
 		loggerThread.start()
+		# loggerThread.join()
 	
 	def md5(self, anything) :
 		self.hasher.update(str(anything))
@@ -35,18 +38,16 @@ class dfDownloader :
 	def downloadInit(self, filename, url) :
 
 		url = urllib2.unquote(url)
-		print time.time()
 		req = urllib2.urlopen(url)
-		print time.time()
 		meta = req.info()
 
 		try :
-			
 			size = int(meta["Content-Length"])
 		except KeyError :
 			pass
 
 		downloadId = self.md5(filename)
+
 		self.logQueue.put(' Job ' + downloadId + ' started.')
 		self.manager.update({ downloadId: {
 								'url'		: url,
@@ -78,7 +79,7 @@ class dfDownloader :
 					'status':	False
 			}
 			baseDownloaderThread = threading.Thread(target=self.baseDownloader,args=(downloadId, workerId))
-			baseDownloaderThread.start()	
+			baseDownloaderThread.start()
 
 	def assembler(self, downloadId) :
 		assemblerData = []
@@ -100,6 +101,7 @@ class dfDownloader :
 			},
 		indent=4))
 		downloadId = self.manager.pop(downloadId)
+		os.system('kill -9 ' + str(os.getpid()))
 
 	def organizer(self) :
 		while True :
@@ -112,7 +114,6 @@ class dfDownloader :
 						downloadCompleted = True
 					else :
 						downloadCompleted = False
-					# print workerId,self.manager[downloadId]['worker'][workerId]['status'],completedJobs,downloadCompleted
 				self.logQueue.put(' Job ' + downloadId + ' Pending- ' + str((float(self.manager[downloadId]['downloaded'])/self.manager[downloadId]['size'])*100) + '%')
 				
 				if completedJobs == self.config['threads'] :
@@ -132,6 +133,7 @@ class dfDownloader :
 		self.logQueue.put(' Job ' + workerId + ' Started')
 		
 		f = urllib2.urlopen(req)
+
 		while True :
 			data = f.read()
 			self.manager[downloadId]['downloaded']	+= len(data)
@@ -143,7 +145,10 @@ class dfDownloader :
 		self.manager[downloadId]['worker'][workerId]['status'] = True
 		
 		self.logQueue.put(" Job " + workerId + ' Completed')
-		
+		# baseDownloaderThread.join()
 
 downloader = dfDownloader()
-downloader.downloadInit('a.pkg','https://www.python.org/ftp/python/2.7.12/python-2.7.12-macosx10.6.pkg')
+
+downloadLink = sys.argv[1].strip()
+downloadFileName = downloadLink.split("/")[-1]
+downloader.downloadInit(downloadFileName, downloadLink)
